@@ -5,17 +5,38 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.streaming.{Minutes, Seconds, StreamingContext}
 import org.apache.spark.{SparkConf, SparkContext}
 
+
 object SparkStreamingStateful extends App with Logging {
 
   private var newContextCreated = false
 
+  val sparkConf = new SparkConf().setAppName("sparkStreamingExamples").setMaster("local[*]")
+  val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+  
+  // Structured Streaming
+  val lines = sparkSession.readStream
+    .format("socket")
+    .option("host", "127.0.0.1")
+    .option("port", 9999)
+    .load()
+
+  import sparkSession.implicits._
+
+  // Split the lines into words
+  val words = lines.as[String].flatMap(_.split(" "))
+
+  // Generate running word count
+  val wordCounts = words.groupBy("value").count()
+
+  val query = wordCounts.writeStream
+    .outputMode("complete")
+    .format("console")
+    .start()
+
+  query.awaitTermination()
+
   def creatingFunc(): StreamingContext = {
-    /**
-      * Spark Configuration and Create Spark Contexts
-      */
-    val sparkConf = new SparkConf().setAppName("sparkStreamingExamples").setMaster("local[*]")
     val sparkContext = SparkContext.getOrCreate(sparkConf)
-    val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
     val ssc = new StreamingContext(sparkContext, Seconds(10))
     val stream = ssc.receiverStream(new DummyReceiver(2))
 
@@ -42,7 +63,7 @@ object SparkStreamingStateful extends App with Logging {
     ssc
   }
 
-  StreamingContext.getActive.foreach {
+  /*StreamingContext.getActive.foreach {
     _.stop(stopSparkContext = false)
   }
 
@@ -53,6 +74,6 @@ object SparkStreamingStateful extends App with Logging {
 
   ssc.start()
 
-  ssc.awaitTerminationOrTimeout(15000)
+  ssc.awaitTerminationOrTimeout(15000)*/
 }
 
